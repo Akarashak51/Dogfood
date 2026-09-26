@@ -1,0 +1,11 @@
+services:
+  portal:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+    # fixtures.json is baked into the image at build time and the store
+    # is entirely in-memory, so the portal needs no outbound network
+    # access at runtime.
+    network_mode: "bridge"

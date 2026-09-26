@@ -1,0 +1,22 @@
+[portal]
+base_url = "http://localhost:8080"
+
+[tiers]
+claimed = ["T1", "T2"]
+pitch = "A seeded, header-authenticated hackathon submission and judging portal with enforced role isolation, plus public voting/comments and a small stretch REST API."
+
+[auth]
+# These headers are printed by the portal on boot (see server logs) and
+# are fixed constants defined in src/authTokens.js, so this file never
+# needs to change between restarts.
+organizer   = "Cookie: session=org_7f2a"
+judge_a     = "Cookie: session=jdg_a_91bc"
+judge_b     = "Cookie: session=jdg_b_44de"
+participant = "Cookie: session=prt_2e88"
+
+[routes]
+gallery      = "/projects"
+submit       = "/projects/new"
+judge_scores = "/api/judge/scores"
+peer_scores  = "/api/judge/scores?judge=judge_a"
+csv_export   = "/api/export.csv"

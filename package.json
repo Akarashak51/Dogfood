@@ -1,0 +1,17 @@
+{
+  "name": "dogfood-portal",
+  "version": "1.0.0",
+  "description": "DOGFOOD hackathon submission & judging portal",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
