@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: DOGFOOD Portal API
+  title: DOGFOOD Portal APIs
   version: 1.0.0
   description: >-
     Local-first hackathon submission, judging, community, and organizer API.
