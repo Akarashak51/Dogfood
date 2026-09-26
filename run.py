@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DOGFOOD 2026 acceptance checker.
+"""DOGFOOD 2026 acceptances checker.
 
 Usage:  python3 run.py .dogfood.toml > acceptance-report.txt
 
