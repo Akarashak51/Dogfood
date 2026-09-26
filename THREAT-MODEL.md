@@ -6,7 +6,7 @@
 - Integrity of project submissions, published results, public votes, and judge participation records.
 - Availability of the single-process portal and its in-memory audit trail.
 
-## Trust boundaries
+## Trust boundary
 
 - Public HTTP requests reach unauthenticated gallery, vote, comment, invite-acceptance, and read-only API routes.
 - Participant, judge, and organizer requests are separated by server-side role middleware.
