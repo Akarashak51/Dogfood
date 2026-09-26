@@ -25,6 +25,10 @@ class CommunityService {
    */
   castVote(projectId, voterIdentifier) {
     if (!this.projects.has(projectId)) throw new DomainError("no such project", 404);
+    if (!voterIdentifier) throw new DomainError("voter identity is required", 400);
+    if (this.votes.byProject(projectId).some((vote) => vote.voter === voterIdentifier)) {
+      throw new DomainError("you have already voted for this project", 409);
+    }
     return this.votes.add({
       id: `vt_${this.votes.size}`,
       project: projectId,
