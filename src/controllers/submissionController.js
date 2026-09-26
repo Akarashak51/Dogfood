@@ -1,5 +1,6 @@
 const express = require("express");
 const { layout } = require("../views/html");
+const { requireRole } = require("../auth/requireRole");
 const { handleControllerError } = require("./handleControllerError");
 
 /**
@@ -33,9 +34,7 @@ function buildSubmissionController(services) {
 
   // T1 (FR-1.3, FR-1.4): requires an authenticated caller; the closed-event
   // check itself lives in SubmissionService, not here.
-  router.post("/projects/new", express.urlencoded({ extended: true }), express.json(), (req, res) => {
-    if (!req.user) return res.status(401).json({ error: "authentication required to submit" });
-
+  router.post("/projects/new", express.urlencoded({ extended: true }), express.json(), requireRole("participant"), (req, res) => {
     try {
       const project = submission.submit(req.body);
       res.status(201).json(project);

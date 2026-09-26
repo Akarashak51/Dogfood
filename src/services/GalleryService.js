@@ -47,7 +47,7 @@ class GalleryService {
     const project = this.projects.get(projectId);
     if (!project) return null;
 
-    const resultsVisible = this.event.isClosed();
+    const resultsVisible = this.event.resultsAreVisible();
 
     return {
       project,

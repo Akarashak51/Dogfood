@@ -24,6 +24,12 @@ class EventRepository {
     if (!this.#event || !this.#event.submissions_close) return false;
     return new Date(this.#event.submissions_close).getTime() < now.getTime();
   }
+
+  resultsAreVisible(now = new Date()) {
+    if (!this.#event) return false;
+    const releaseAt = this.#event.results_publish_at || this.#event.voting_close;
+    return Boolean(releaseAt && new Date(releaseAt).getTime() <= now.getTime());
+  }
 }
 
 module.exports = { EventRepository };
