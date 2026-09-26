@@ -1,4 +1,4 @@
-# Entity–Relationship Diagram
+# Entity-Relationship 
 ## DOGFOOD Portal — Data Model
 
 This diagram covers both the fixture-supplied entities (Event, Track,

@@ -1,7 +1,7 @@
 # Software Requirements Specification (SRS)
 ## DOGFOOD Portal — Hackathon Submission & Judging Platform
 
-Version 1.0 · DOGFOOD 72-hour Hackathon (Hackathon Raptors)
+Version 1.0 · DOGFOOD 72-hour Hackathon
 
 ---
 
