@@ -5,9 +5,13 @@ const test = require("node:test");
 
 const fixtures = require("../fixtures.json");
 const { createContainer } = require("../src/container");
+const { TokenAuthProvider } = require("../src/auth/TokenAuthProvider");
+const { TOKENS } = require("../src/config/authTokens");
 const { EventRepository } = require("../src/repositories/EventRepository");
 const { buildGalleryController } = require("../src/controllers/galleryController");
 const { buildSubmissionController } = require("../src/controllers/submissionController");
+const { buildEventController } = require("../src/controllers/eventController");
+const { buildWorkspaceController } = require("../src/controllers/workspaceController");
 
 function seededContainer() {
   const container = createContainer();
@@ -206,6 +210,111 @@ test("the specific submission page is routed before project detail", async () =>
     });
     assert.equal(response.status, 200);
     assert.match(response.body, /Submissions are closed/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("event setup edits tracks and prizes with regular form fields", async () => {
+  const { services } = seededContainer();
+  const app = express();
+  app.use((req, _res, next) => {
+    req.user = { role: "organizer" };
+    next();
+  });
+  app.use(buildEventController(services));
+  const server = app.listen(0);
+  const port = server.address().port;
+  try {
+    const page = await new Promise((resolve, reject) => {
+      http.get({ hostname: "127.0.0.1", port, path: "/organizer/event" }, (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => body += chunk);
+        res.on("end", () => resolve({ status: res.statusCode, body }));
+      }).on("error", reject);
+    });
+    assert.equal(page.status, 200);
+    assert.match(page.body, /tracks\[0\]\[name\]/);
+    assert.doesNotMatch(page.body, /Tracks \(JSON\)|name="tracks"><textarea/);
+
+    const formData = new URLSearchParams({
+      name: "Updated event form",
+      submissions_close: "2999-08-01T00:00",
+      voting_open: "",
+      voting_close: "",
+      results_publish_at: "",
+      voting_access: "open",
+    });
+    fixtures.tracks.forEach((track, index) => {
+      formData.set(`tracks[${index}][id]`, track.id);
+      formData.set(`tracks[${index}][name]`, index === 0 ? "Updated track name" : track.name);
+    });
+    formData.set("prizes[0][name]", "Community choice");
+    formData.set("prizes[0][description]", "Audience selected");
+    const form = formData.toString();
+    const saved = await new Promise((resolve, reject) => {
+      const request = http.request({
+        hostname: "127.0.0.1",
+        port,
+        path: "/organizer/event",
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": Buffer.byteLength(form) },
+      }, (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => body += chunk);
+        res.on("end", () => resolve({ status: res.statusCode, body }));
+      });
+      request.on("error", reject);
+      request.end(form);
+    });
+    assert.equal(saved.status, 200);
+    assert.equal(services.eventManagement.details().tracks[0].name, "Updated track name");
+    assert.equal(services.eventManagement.details().event.prizes[0].name, "Community choice");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("logout revokes runtime sessions without invalidating checker identities", () => {
+  const auth = new TokenAuthProvider(TOKENS);
+  auth.revokeSession("org_7f2a");
+  assert.deepEqual(auth.resolve({ headers: { cookie: "session=org_7f2a" } }), { roleLabel: "organizer" });
+  const session = auth.issueSession({ roleLabel: "participant", teamId: "tm_runtime" });
+  assert.deepEqual(auth.resolve({ headers: { cookie: `session=${session}` } }), { roleLabel: "participant", teamId: "tm_runtime" });
+  auth.revokeSession(session);
+  assert.equal(auth.resolve({ headers: { cookie: `session=${session}` } }), null);
+});
+
+test("role workspaces render HTML while API reference remains readable", async () => {
+  const { repositories, services } = seededContainer();
+  const app = express();
+  app.use((req, _res, next) => {
+    req.user = req.headers["x-test-role"] === "judge"
+      ? { role: "judge", judgeId: repositories.judge.orderedIds()[0] }
+      : { role: "organizer" };
+    next();
+  });
+  app.use(buildWorkspaceController(services, repositories));
+  const server = app.listen(0);
+  const request = (path, role = "organizer") => new Promise((resolve, reject) => {
+    http.get({ hostname: "127.0.0.1", port: server.address().port, path, headers: { "X-Test-Role": role } }, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => body += chunk);
+      res.on("end", () => resolve({ status: res.statusCode, type: res.headers["content-type"], body }));
+    }).on("error", reject);
+  });
+  try {
+    for (const path of ["/judge/assignments", "/judge/scores", "/organizer/judging/progress", "/organizer/results", "/organizer/audit", "/organizer/webhooks", "/api-docs"]) {
+      const response = await request(path, path.startsWith("/judge/") ? "judge" : "organizer");
+      assert.equal(response.status, 200, `${path} status`);
+      assert.match(response.type, /text\/html/);
+      assert.match(response.body, /<!doctype html>/i);
+    }
+    const forbidden = await request("/organizer/results", "judge");
+    assert.equal(forbidden.status, 403);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

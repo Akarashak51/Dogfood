@@ -32,6 +32,15 @@ class SubmissionService {
     return this.tracks.list();
   }
 
+  projectsForTeam(teamId) {
+    return this.projects.list().filter((project) => project.team === teamId);
+  }
+
+  trackName(trackId) {
+    const track = trackId && this.tracks.get(trackId);
+    return track ? track.name : "Open track";
+  }
+
   /**
   * @param {{title?: string, team?: string, track?: string, repo_url?: string, summary?: string}} input
   * @param {string} ownerTeam the authenticated participant's team id

@@ -10,6 +10,12 @@ function buildSubmissionController(services) {
   const router = express.Router();
   const { submission } = services;
 
+  router.get("/participant/projects", requireRole("participant"), (req, res) => {
+    const projects = submission.projectsForTeam(req.user.teamId);
+    const cards = projects.map((project) => `<article class="project-card"><div class="card-top"><span class="track-tag">${escapeHtml(submission.trackName(project.track))}</span><span class="meta">${project.updated_at ? "Edited" : "Submitted"}</span></div><h2><a href="/projects/${escapeHtml(project.id)}">${escapeHtml(project.title)}</a></h2><p>${escapeHtml(project.summary || "")}</p><a href="/projects/${escapeHtml(project.id)}">View project</a></article>`).join("");
+    res.status(200).send(layout("My projects", `<p class="eyebrow">Participant workspace</p><div class="row-between"><h1>My projects</h1><a class="button" href="/projects/new">New submission</a></div><div class="project-grid">${cards || '<div class="empty">Your team has not submitted a project yet.</div>'}</div>`));
+  });
+
   router.get("/projects/new", (req, res) => {
     if (!submission.isOpen()) {
       return res

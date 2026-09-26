@@ -6,6 +6,11 @@ function buildAuthController() {
   const router = express.Router();
   const demoRoles = ["organizer", "judge_a", "judge_b", "participant"];
 
+  router.get("/api/session", (req, res) => {
+    const user = req.user ? { role: req.user.role, teamId: req.user.teamId } : null;
+    res.status(200).json({ user });
+  });
+
   router.get("/login", (_req, res) => {
     const options = demoRoles.map((role) => `<option value="${role}">${role.replace("_", " ")}</option>`).join("");
     res.status(200).send(layout("Demo access", `<p class="eyebrow">Local evaluation</p><h1>Choose a demo identity</h1><form class="panel" method="post" action="/login"><label>Role<select name="role">${options}</select></label><button type="submit">Continue</button></form><p class="muted">These shared fixture identities are for local evaluation only. Do not expose this demo sign-in on a public production deployment.</p>`));

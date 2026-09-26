@@ -19,6 +19,7 @@ class TokenAuthProvider {
   /** @param {Readonly<Record<string,string>>} tokens sessionValue -> roleLabel */
   constructor(tokens) {
     this.tokens = { ...tokens };
+    this.bootstrapSessions = new Set(Object.keys(tokens));
   }
 
   /**
@@ -41,6 +42,7 @@ class TokenAuthProvider {
   }
 
   revokeSession(sessionId) {
+    if (this.bootstrapSessions.has(sessionId)) return;
     delete this.tokens[sessionId];
   }
 

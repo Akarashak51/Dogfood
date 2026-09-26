@@ -16,6 +16,7 @@ const { buildTeamController } = require("./controllers/teamController");
 const { buildEventController } = require("./controllers/eventController");
 const { buildJudgeInvitationController } = require("./controllers/judgeInvitationController");
 const { buildAuthController } = require("./controllers/authController");
+const { buildWorkspaceController } = require("./controllers/workspaceController");
 
 const PORT = process.env.PORT || 8080;
 const FIXTURES_PATH = process.env.FIXTURES_PATH || path.join(__dirname, "..", "fixtures.json");
@@ -40,6 +41,7 @@ app.use(buildTeamController(services, authProvider));
 app.use(buildEventController(services));
 app.use(buildJudgeInvitationController(services, authProvider));
 app.use(buildAuthController());
+app.use(buildWorkspaceController(services, repositories));
 
 app.use((_req, res) => res.status(404).json({ error: "not found" }));
 
