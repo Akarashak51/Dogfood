@@ -72,3 +72,16 @@ test("weighted scores and normalization produce ordered, bounded results", () =>
   assert.ok(results.normalized.every((item) => item.score >= 1 && item.score <= 5));
   assert.deepEqual(results.normalized.map((item) => item.rank), results.normalized.map((_, index) => index + 1));
 });
+
+test("participants can create and edit only their own project before the deadline", () => {
+  const { repositories, services } = seededContainer();
+  repositories.event.set({ ...fixtures.event, submissions_close: "2999-01-01T00:00:00Z" });
+  const ownerTeam = fixtures.teams[0].id;
+  const otherTeam = fixtures.teams[1].id;
+  const project = services.submission.submit({ title: "New work", team: otherTeam, track: fixtures.tracks[0].id }, ownerTeam);
+  assert.equal(project.team, ownerTeam);
+  assert.throws(() => services.submission.update(project.id, { title: "Hijack" }, otherTeam), (error) => error.status === 403);
+  assert.equal(services.submission.update(project.id, { title: "Updated" }, ownerTeam).title, "Updated");
+  repositories.event.set({ ...fixtures.event, submissions_close: "2000-01-01T00:00:00Z" });
+  assert.throws(() => services.submission.update(project.id, { title: "Late edit" }, ownerTeam), (error) => error.status === 403);
+});

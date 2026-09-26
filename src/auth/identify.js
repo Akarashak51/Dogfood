@@ -15,7 +15,7 @@
  *   O(1), and to judgeRepository.orderedIds(), amortized O(1) — see
  *   JudgeRepository for why that call is cheap on every request).
  */
-function createIdentifyMiddleware(authProvider, judgeRepository) {
+function createIdentifyMiddleware(authProvider, judgeRepository, teamRepository) {
   return function identify(req, _res, next) {
     const resolved = authProvider.resolve(req);
 
@@ -33,6 +33,9 @@ function createIdentifyMiddleware(authProvider, judgeRepository) {
         seat: roleLabel,
         judgeId: roleLabel === "judge_a" ? firstJudgeId : secondJudgeId,
       };
+    } else if (roleLabel === "participant") {
+      const [team] = (teamRepository ? teamRepository.list() : []).slice().sort((left, right) => left.id.localeCompare(right.id));
+      req.user = { role: roleLabel, teamId: team && team.id };
     } else {
       req.user = { role: roleLabel };
     }

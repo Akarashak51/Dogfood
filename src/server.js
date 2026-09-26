@@ -23,7 +23,7 @@ services.judging.assignProjects(repositories.judge.list(), repositories.project.
 const app = express();
 
 const authProvider = new TokenAuthProvider(TOKENS);
-app.use(createIdentifyMiddleware(authProvider, repositories.judge));
+app.use(createIdentifyMiddleware(authProvider, repositories.judge, repositories.team));
 
 app.get("/", (_req, res) => res.redirect("/projects"));
 
