@@ -55,6 +55,10 @@ function buildJudgeController(services, repositories) {
     res.status(200).json(judging.normalizedResults());
   });
 
+  router.get("/api/organizer/audit", requireRole("organizer"), (_req, res) => {
+    res.status(200).json({ entries: repositories.audit.list() });
+  });
+
   router.post("/api/organizer/judging/assignments", express.json(), requireRole("organizer"), (req, res) => {
     try {
       const assignments = judging.assignProjects(

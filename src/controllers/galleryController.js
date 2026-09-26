@@ -72,9 +72,11 @@ function buildGalleryController(services) {
     );
   });
 
-  router.post("/projects/:id/vote", (req, res) => {
+  router.post("/projects/:id/vote", express.urlencoded({ extended: true }), express.json(), (req, res) => {
     try {
-      community.castVote(req.params.id, req.ip);
+      const access = community.votingAccess();
+      const voter = access === "email" ? String(req.body.email || "").trim().toLowerCase() : req.ip;
+      community.castVote(req.params.id, voter, Boolean(req.user));
       res.redirect(`/projects/${req.params.id}`);
     } catch (err) {
       handleControllerError(err, res);
@@ -86,7 +88,7 @@ function buildGalleryController(services) {
     express.urlencoded({ extended: true }),
     (req, res) => {
       try {
-        community.addComment(req.params.id, req.body.author, req.body.text);
+        community.addComment(req.params.id, req.body.author, req.body.text, req.ip);
         res.redirect(`/projects/${req.params.id}`);
       } catch (err) {
         handleControllerError(err, res);
