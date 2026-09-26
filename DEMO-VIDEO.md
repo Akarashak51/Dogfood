@@ -2,7 +2,7 @@
 
 A suggested run of show, timed to roughly 3–4 minutes. Nothing here is
 required wording — read it in your own voice, or use it as a checklist
-of beats to hit. Screen-record your terminal + browser; no editing
+of beats to hit. Screen-record your terminal + browser; no editinG
 software needed beyond basic trimming.
 
 ## Before you hit record

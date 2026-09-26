@@ -5,7 +5,7 @@ k = size of the specific result being returned (e.g. one judge's
 scores) — always ≤ n, usually far smaller.
 
 The original rows map to method annotations; additional workflows added
-later are listed below with their current access-path costs.
+later are listed below with their current access-path cost.
 
 ## Repositories (`src/repositories/`)
 
