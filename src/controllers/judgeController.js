@@ -33,9 +33,39 @@ function buildJudgeController(services, repositories) {
   });
 
   // T3 (FR-3.4): randomized scoring queue.
-  router.get("/api/judge/queue", requireRole("judge"), (_req, res) => {
-    const projectIds = repositories.project.list().map((p) => p.id);
+  router.get("/api/judge/queue", requireRole("judge"), (req, res) => {
+    const projectIds = judging.assignmentsFor(req.user.judgeId).map((assignment) => assignment.project);
     res.status(200).json({ queue: judging.randomizedQueue(projectIds) });
+  });
+
+  router.get("/api/judge/assignments", requireRole("judge"), (req, res) => {
+    const assignments = judging.assignmentsFor(req.user.judgeId).map((assignment) => ({
+      ...assignment,
+      project: repositories.project.get(assignment.project),
+      scored: repositories.score.byJudge(req.user.judgeId).some((score) => score.project === assignment.project),
+    }));
+    res.status(200).json({ assignments });
+  });
+
+  router.get("/api/organizer/judging/progress", requireRole("organizer"), (_req, res) => {
+    res.status(200).json({ progress: judging.progress() });
+  });
+
+  router.get("/api/organizer/judging/normalization", requireRole("organizer"), (_req, res) => {
+    res.status(200).json(judging.normalizedResults());
+  });
+
+  router.post("/api/organizer/judging/assignments", express.json(), requireRole("organizer"), (req, res) => {
+    try {
+      const assignments = judging.assignProjects(
+        repositories.judge.list(),
+        repositories.project.list(),
+        req.body && req.body.reviewsPerProject
+      );
+      res.status(200).json({ assigned: assignments.length, assignments });
+    } catch (err) {
+      handleControllerError(err, res);
+    }
   });
 
   return router;

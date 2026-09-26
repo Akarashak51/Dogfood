@@ -18,6 +18,7 @@ const FIXTURES_PATH = process.env.FIXTURES_PATH || path.join(__dirname, "..", "f
 
 const { repositories, services } = createContainer();
 seedFromFixtures(repositories, FIXTURES_PATH); // exits with a clear error if fixtures.json is missing
+services.judging.assignProjects(repositories.judge.list(), repositories.project.list(), 3);
 
 const app = express();
 

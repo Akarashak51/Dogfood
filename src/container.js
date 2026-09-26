@@ -36,6 +36,8 @@ function createContainer() {
     comment: new CommentRepository(),
     vote: new VoteRepository(),
     webhook: new InMemoryRepository(),
+    assignment: new InMemoryRepository(),
+    audit: new InMemoryRepository(),
   };
 
   const services = {
