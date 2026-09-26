@@ -12,6 +12,10 @@ const { buildSubmissionController } = require("./controllers/submissionControlle
 const { buildJudgeController } = require("./controllers/judgeController");
 const { buildExportController } = require("./controllers/exportController");
 const { buildStretchController } = require("./controllers/stretchController");
+const { buildTeamController } = require("./controllers/teamController");
+const { buildEventController } = require("./controllers/eventController");
+const { buildJudgeInvitationController } = require("./controllers/judgeInvitationController");
+const { buildAuthController } = require("./controllers/authController");
 
 const PORT = process.env.PORT || 8080;
 const FIXTURES_PATH = process.env.FIXTURES_PATH || path.join(__dirname, "..", "fixtures.json");
@@ -27,11 +31,15 @@ app.use(createIdentifyMiddleware(authProvider, repositories.judge, repositories.
 
 app.get("/", (_req, res) => res.redirect("/projects"));
 
-app.use(buildGalleryController(services));
 app.use(buildSubmissionController(services));
+app.use(buildGalleryController(services));
 app.use(buildJudgeController(services, repositories));
 app.use(buildExportController(services));
 app.use(buildStretchController(services, repositories));
+app.use(buildTeamController(services, authProvider));
+app.use(buildEventController(services));
+app.use(buildJudgeInvitationController(services, authProvider));
+app.use(buildAuthController());
 
 app.use((_req, res) => res.status(404).json({ error: "not found" }));
 

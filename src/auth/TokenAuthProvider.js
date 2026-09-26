@@ -1,3 +1,5 @@
+const { randomUUID } = require("node:crypto");
+
 /**
  * Resolves an HTTP `Cookie` header into a role label, given a fixed
  * table of {sessionValue: roleLabel}.
@@ -16,7 +18,7 @@
 class TokenAuthProvider {
   /** @param {Readonly<Record<string,string>>} tokens sessionValue -> roleLabel */
   constructor(tokens) {
-    this.tokens = tokens;
+    this.tokens = { ...tokens };
   }
 
   /**
@@ -27,8 +29,19 @@ class TokenAuthProvider {
     const sessionId = this.#parseSessionCookie(req.headers.cookie);
     if (!sessionId) return null;
 
-    const roleLabel = this.tokens[sessionId];
-    return roleLabel ? { roleLabel } : null;
+    const identity = this.tokens[sessionId];
+    if (!identity) return null;
+    return typeof identity === "string" ? { roleLabel: identity } : { ...identity };
+  }
+
+  issueSession(identity) {
+    const sessionId = randomUUID();
+    this.tokens[sessionId] = identity;
+    return sessionId;
+  }
+
+  revokeSession(sessionId) {
+    delete this.tokens[sessionId];
   }
 
   /** @param {string | undefined} cookieHeader */

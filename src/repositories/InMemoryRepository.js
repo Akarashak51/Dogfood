@@ -38,6 +38,11 @@ class InMemoryRepository {
     return this.#itemsById.has(id);
   }
 
+  /** @param {string} id */
+  delete(id) {
+    return this.#itemsById.delete(id);
+  }
+
   list() {
     return Array.from(this.#itemsById.values());
   }

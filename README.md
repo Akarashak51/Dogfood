@@ -125,36 +125,42 @@ The portal boots on `http://localhost:8080` exactly as in Option A;
 
 ## What's implemented
 
-- **T1 — Core:** public gallery, project detail pages, role-authenticated
-  submission, closed-event enforcement.
-- **T2 — Judging:** a judge can read their own scores; a judge is
-  refused another judge's scores (enforced server-side in
-  `JudgingService`, see `ARCHITECTURE.md`); a participant is refused
-  judge routes; organizer CSV export.
-- **T3 — Public (partial, not claimed):** public voting, public
-  comments, results hidden on a project page until the event closes,
-  randomized judge scoring queue (`GET /api/judge/queue`).
-- **T4 — Stretch (partial, not claimed):** a small read-only REST API
-  (`/api/v1/projects`), webhook registration, bulk project import,
-  plain-text certificates.
+- **T1 — Core:** event setup, participant registration, one-time team
+  invitations, participant sessions, deadline-enforced project create
+  and edit, searchable/filterable public gallery, and role guards.
+- **T2 — Judging:** expiring judge invitations, track-safe project
+  assignments, weighted configurable criteria, private judge ballots,
+  organizer progress and normalization views, audit history, and CSV
+  exports.
+- **T3 — Public:** open/email/authenticated voting modes, per-identity
+  duplicate checks, rolling rate limits, organizer-visible audit events,
+  comments, results release windows, and randomized assigned queues.
+- **T4 — Stretch:** versioned REST routes, published OpenAPI, bulk project
+  import/export, certificates, Ed25519 judge records, and an embeddable
+  gallery widget, plus signed asynchronous webhook delivery attempts.
 
 `.dogfood.toml` only claims **T1 and T2** — those are the tiers this
-build has actually verified with `run.py`. The T3/T4 code exists and
-works standalone (`tests/README.md` has manual smoke-test commands),
-but wasn't run through the full checker suite, so we are not claiming
-it. See `JUDGING.md` for why.
+build has actually verified with the official `run.py`. That checker
+contains seven T1/T2 checks and does not verify T3/T4. Do not interpret
+the additional local tests as official T3/T4 certification. See
+`JUDGING.md` and `THREAT-MODEL.md` for methods and residual risks.
 
 ## Honest limitations
 
-- No persistent database — everything lives in memory and resets on
-  restart. Fine for a judged demo against a fixed fixture set; not
-  fine for a real multi-day event.
-- Webhooks are recorded, not delivered (no outbound network calls,
-  by design — see `ARCHITECTURE.md`).
-- Voting is deduplicated by IP only, which is easy to defeat. Good
-  enough for a demo, not for a real public vote.
-- No automated test suite beyond the DOGFOOD checker itself
-  (`tests/README.md` has manual smoke-test commands, not a real suite).
+- No persistent database — accounts, runtime sessions, invitations,
+  audit entries, votes, comments, and submissions reset on restart.
+- Bootstrap checker tokens are public demo credentials, not production
+  authentication. Participant email addresses are not independently
+  verified; invite URLs are bearer credentials.
+- Webhook attempts are best-effort, single-shot, and in-memory; there is
+  no durable queue or retry worker. Network-off actions still complete,
+  but delivery status will be failed.
+- Open-link vote identity is based on requester IP (keyed digest at rest);
+  it is a useful duplicate/rate-limit signal, not Sybil resistance.
+- Judge records detect payload changes, but their included public key is
+  not anchored to a long-lived trusted event identity.
+- `npm test` runs the local Node test suite. The official checker remains
+  the only acceptance report used for the declared T1/T2 claim.
 
 ## Repo layout
 
@@ -171,6 +177,8 @@ ARCHITECTURE.md         — layers, SOLID mapping, and design rationale
 COMPLEXITY.md           — time/space complexity of every operation
 DATA-MODEL.md           — schema, and the way data comes in and out
 JUDGING.md              — assignment, scoring, normalization
+THREAT-MODEL.md          — abuse cases, controls, residual risks
+openapi.yaml             — published REST contract (`/api/openapi.yaml`)
 SUBMISSION-CHECKLIST.md — final steps before you submit (both setup paths)
 DEMO-VIDEO.md           — a ready-to-read script for the required demo video
 LICENSE                 — MIT
@@ -187,5 +195,5 @@ src/
   controllers/            — thin HTTP layer, one file per route group
   views/                  — server-rendered HTML helpers
 public/                 — (reserved; UI is server-rendered for now)
-tests/                  — manual smoke-test notes
+tests/                  — automated behavior tests and smoke-test notes
 ```

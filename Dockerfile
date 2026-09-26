@@ -11,6 +11,7 @@ RUN npm ci --omit=dev
 
 COPY src ./src
 COPY fixtures.json ./fixtures.json
+COPY openapi.yaml ./openapi.yaml
 
 ENV PORT=8080
 EXPOSE 8080

@@ -4,8 +4,8 @@ n = total count of the relevant entity (projects, scores, …).
 k = size of the specific result being returned (e.g. one judge's
 scores) — always ≤ n, usually far smaller.
 
-Every row below matches an `@complexity` JSDoc comment at the actual
-method definition; this file is a map to those, not a separate claim.
+The original rows map to method annotations; additional workflows added
+later are listed below with their current access-path costs.
 
 ## Repositories (`src/repositories/`)
 
@@ -41,6 +41,23 @@ method definition; this file is a map to those, not a separate claim.
 | `CommunityService` | `castVote` / `addComment` | O(1) | O(1) | |
 | `StretchService` | `registerWebhook` / `bulkImport` | O(1) / O(m) | O(1) / O(m) | m = imported item count |
 | | `certificateFor` | O(n) | O(k) | deliberate linear scan — see ARCHITECTURE.md's note on not over-indexing a cold path |
+
+## Added workflows
+
+| Operation | Time | Space | Notes |
+|-----------|------|-------|-------|
+| `JudgingService.assignProjects` | O(a + p·j log j) | O(a + j) | p projects, j judges, a existing assignments; sorts eligible judges per project |
+| `JudgingService.assignJudgeProjects` | O(m·t) | O(m) | m project ids, t track count |
+| `JudgingService.progress` | O(p·(a+s)) | O(p+a) | p projects, a assignments, s scores; counts only assigned ballots |
+| `JudgingService.normalizedResults` | O(s·p + p log p) | O(s+p) | s ballots and p projects; computes per-judge z-scores and ranks project means |
+| `JudgingService` rubric methods | O(r) | O(r) | r criteria; rubric is bounded to three criteria |
+| judge invite checks | O(j+i+t) | O(1) | j judges, i invitations, t requested tracks |
+| team email membership checks | O(m) | O(1) | m total team-member emails |
+| `EventService.configure` | O(t + p·t + j·t) worst case | O(t) | validates track removals against projects and judges |
+| `CommunityService.castVote` | O(v+r) | O(r) | v project votes and r active rate-window timestamps |
+| `ExportService.projectsToCsv` | O(p) | O(p) | p projects |
+| `StretchService.bulkImport` | O(m·u) | O(m) | m records, u bounded field/URL size; entity lookups are Map-backed |
+| `StretchService.dispatchWebhooks` | O(w) to enqueue | O(w) | w matching endpoints; network attempts are asynchronous and time-bounded |
 
 ## Design rule applied throughout
 

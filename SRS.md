@@ -127,8 +127,8 @@ project loaded from `fixtures.json`.
 *Verified by: `GET {routes.gallery}`, expect a known fixture title in the body.*
 
 **FR-1.3 Submission endpoint.**
-The system shall expose a route for creating a new project submission,
-gated to authenticated participants.
+The system shall expose browser and REST routes for authenticated
+participants to create and edit their team's project before the deadline.
 
 **FR-1.4 Deadline enforcement.**
 Once `fixtures.event.submissions_close` has passed, a submission
@@ -137,8 +137,9 @@ the backend.
 *Verified by: `POST {routes.submit}` as participant, expect 4xx.*
 
 **FR-1.5 Team & event model.**
-The system shall represent events, teams, and their members as loaded
-from the fixture, and associate each project with exactly one team.
+The system shall represent events, tracks, teams, and members loaded
+from fixtures; support event configuration and one-time team invites;
+and associate every project with exactly one team.
 
 ### 3.2 T2 — Judging
 
@@ -167,34 +168,44 @@ functionality, quality) sufficient to compute a weighted average
 downstream.
 
 **FR-2.6 Progress visibility.**
-The system should provide organizers a way to see which projects have
-and have not yet been scored (implemented here via the raw project +
-score export rather than a dedicated dashboard — see JUDGING.md).
+The system shall provide an organizer dashboard and API that report
+assigned, submitted, and outstanding ballots per project. Ballots from
+unassigned judges do not count toward completion.
 
-### 3.3 T3 — Public (implemented, not claimed against the checker)
+### 3.3 T3 — Public (implemented, not verified by the checker)
 
-**FR-3.1 Public voting.** Any visitor may cast a vote on a project.
+**FR-3.1 Public voting.** Visitors may vote according to the event's
+open-link, email-gated, or authenticated access policy; duplicate and
+rate-limited requests are rejected and audited.
 
 **FR-3.2 Public comments.** Any visitor may leave a comment on a project.
 
 **FR-3.3 Hidden results.** A project's scores shall not be shown on
-its public page until the event has closed.
+its public page until `results_publish_at` (or `voting_close` when no
+separate publication time is configured).
 
 **FR-3.4 Randomized ballot order.** A judge's scoring queue shall be
 presented in a randomized (not fixed submission) order.
 
-### 3.4 T4 — Stretch (implemented, not claimed against the checker)
+### 3.4 T4 — Stretch (implemented, not verified by the checker)
 
-**FR-4.1 Read-only REST API** over the project/comment/vote data.
+**FR-4.1 REST API** for public, participant, judge, and organizer actions;
+the OpenAPI document is served at `/api/openapi.yaml`.
 
-**FR-4.2 Webhook registration** for organizers, recorded against
-submission events (delivery is out of scope given the no-network
-runtime constraint — see ARCHITECTURE.md).
+**FR-4.2 Webhooks.** Organizers may register event subscriptions; matching
+mutations issue signed asynchronous HTTP POST attempts. Delivery is
+best-effort and does not block the action.
 
-**FR-4.3 Bulk import** of additional projects by an organizer.
+**FR-4.3 Bulk import and export** of project records by an organizer.
 
 **FR-4.4 Certificates** — a plain-text certificate of participation,
 generated per team.
+
+**FR-4.5 Verifiable judge records.** Judge participation records are
+signed with Ed25519 and can be checked through the public verification API.
+
+**FR-4.6 Embeddable gallery.** A script loader embeds the public project
+gallery in another page.
 
 ---
 

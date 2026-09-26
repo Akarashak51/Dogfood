@@ -88,15 +88,15 @@ erDiagram
 
 | Entity | Source | Notes |
 |--------|--------|-------|
-| `EVENT` | `fixtures.json` (`event`) | Singleton per portal instance; `submissions_close` drives all deadline checks (FR-1.4 in `SRS.md`) |
+| `EVENT` | `fixtures.json` (`event`) | Singleton per portal instance; submission, voting, and results-release dates are independent |
 | `TRACK` | `fixtures.json` (`tracks[]`) | A project belongs to at most one track; a judge may be assigned to several |
 | `JUDGE` | `fixtures.json` (`judges[]`) | `tracks` is a many-to-many join, modeled as an array of track ids rather than a separate join table (matches the fixture's own shape) |
-| `TEAM` | `fixtures.json` (`teams[]`) | `members` is a list of emails, not a foreign key to a `USER` table — this portal has no separate user/account entity, since login itself is out of scope (see `ARCHITECTURE.md`) |
+| `TEAM` | `fixtures.json` (`teams[]`) | `members` is a list of emails; runtime invite sessions carry team identity without a separate durable user table |
 | `PROJECT` | `fixtures.json` (`projects[]`) | Created either at seed time (from the fixture) or at runtime (`POST /projects/new`, `POST /api/import`) — both paths write into the same `projects` map, see `DATA-MODEL.md` |
 | `SCORE` | `fixtures.json` (`scores[]`) | `criteria` is intentionally an open JSON object, not a fixed column set — the fixture itself doesn't fix a rubric shape (see `JUDGING.md`) |
 | `COMMENT` | Added by this portal (T3) | Public, unauthenticated; not present in `fixtures.json` |
-| `VOTE` | Added by this portal (T3) | Public, unauthenticated, deduplicated by IP only (documented limitation) |
-| `WEBHOOK` | Added by this portal (T4) | Organizer-registered; recorded, not delivered (no outbound network at runtime) |
+| `VOTE` | Added by this portal (T3) | Access is event-configurable; one per keyed requester fingerprint and project, with rate limits and audit |
+| `WEBHOOK` | Added by this portal (T4) | Organizer-registered; matching actions trigger signed asynchronous delivery attempts |
 
 ## 3. Cardinality summary
 

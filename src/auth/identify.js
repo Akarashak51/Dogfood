@@ -26,16 +26,17 @@ function createIdentifyMiddleware(authProvider, judgeRepository, teamRepository)
 
     const { roleLabel } = resolved;
 
-    if (roleLabel === "judge_a" || roleLabel === "judge_b") {
+    if (roleLabel === "judge_a" || roleLabel === "judge_b" || (roleLabel === "judge" && resolved.judgeId)) {
       const [firstJudgeId, secondJudgeId] = judgeRepository.orderedIds();
       req.user = {
         role: "judge",
         seat: roleLabel,
-        judgeId: roleLabel === "judge_a" ? firstJudgeId : secondJudgeId,
+        judgeId: resolved.judgeId || (roleLabel === "judge_a" ? firstJudgeId : secondJudgeId),
+        email: resolved.email,
       };
     } else if (roleLabel === "participant") {
       const [team] = (teamRepository ? teamRepository.list() : []).slice().sort((left, right) => left.id.localeCompare(right.id));
-      req.user = { role: roleLabel, teamId: team && team.id };
+      req.user = { role: roleLabel, teamId: resolved.teamId || (team && team.id), email: resolved.email };
     } else {
       req.user = { role: roleLabel };
     }

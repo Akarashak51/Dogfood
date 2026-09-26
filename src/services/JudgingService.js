@@ -1,4 +1,5 @@
 const { DomainError } = require("../errors/DomainError");
+const { randomUUID } = require("node:crypto");
 
 /**
  * Owns the rule the DOGFOOD spec calls out as costing the most points
@@ -15,15 +16,19 @@ class JudgingService {
    *           project: import('../repositories/InMemoryRepository').InMemoryRepository,
    *           assignment: import('../repositories/InMemoryRepository').InMemoryRepository,
    *           event: import('../repositories/EventRepository').EventRepository,
-   *           audit: import('../repositories/InMemoryRepository').InMemoryRepository}} repositories
+  *           audit: import('../repositories/InMemoryRepository').InMemoryRepository,
+  *           judgeInvite: import('../repositories/InMemoryRepository').InMemoryRepository,
+  *           track: import('../repositories/InMemoryRepository').InMemoryRepository}} repositories
    */
-  constructor({ judge, score, project, assignment, event, audit }) {
+  constructor({ judge, score, project, assignment, event, audit, judgeInvite, track }) {
     this.judges = judge;
     this.scores = score;
     this.projects = project;
     this.assignments = assignment;
     this.event = event;
     this.audit = audit;
+    this.judgeInvites = judgeInvite;
+    this.tracks = track;
   }
 
   /**
@@ -77,9 +82,12 @@ class JudgingService {
     if (this.scores.byJudge(judgeId).some((score) => score.project === project)) {
       throw new DomainError("this project has already been scored", 409);
     }
+    const weights = this.rubricWeights();
     const entries = Object.entries(criteria);
-    if (!entries.length || entries.some(([, value]) => !Number.isFinite(Number(value)) || Number(value) < 1 || Number(value) > 5)) {
-      throw new DomainError("criteria must contain scores from 1 to 5", 400);
+    if (entries.length !== Object.keys(weights).length || entries.some(([key, value]) =>
+      !Object.prototype.hasOwnProperty.call(weights, key) || !Number.isFinite(Number(value)) || Number(value) < 1 || Number(value) > 5
+    )) {
+      throw new DomainError("every rubric criterion must be scored from 1 to 5", 400);
     }
     const entry = this.scores.add({
       id: `sc_${this.scores.size}`,
@@ -114,6 +122,68 @@ class JudgingService {
     return this.assignments.list();
   }
 
+  createJudgeInvitation({ email, name, tracks }) {
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) || !String(name || "").trim()) {
+      throw new DomainError("judge name and valid email are required", 400);
+    }
+    if (this.judges.list().some((judge) => judge.email.toLowerCase() === normalizedEmail) ||
+        this.judgeInvites.list().some((invite) => invite.email === normalizedEmail && !invite.accepted_at)) {
+      throw new DomainError("a judge or invitation already uses this email", 409);
+    }
+    if (!Array.isArray(tracks) || !tracks.length || tracks.some((trackId) => !this.tracks.has(trackId))) {
+      throw new DomainError("at least one valid track is required", 400);
+    }
+    const token = randomUUID();
+    const invitation = this.judgeInvites.add({
+      id: token,
+      token,
+      email: normalizedEmail,
+      name: String(name).trim().slice(0, 100),
+      tracks: [...new Set(tracks)],
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+    this.#recordAudit("judge.invited", { email: normalizedEmail, tracks: invitation.tracks });
+    return invitation;
+  }
+
+  judgeInvitation(token) {
+    const invite = this.judgeInvites.get(token);
+    if (!invite || invite.accepted_at || new Date(invite.expires_at).getTime() <= Date.now()) return null;
+    return invite;
+  }
+
+  acceptJudgeInvitation(token) {
+    const invitation = this.judgeInvitation(token);
+    if (!invitation) throw new DomainError("judge invitation is invalid, expired, or already used", 404);
+    const judge = this.judges.add({
+      id: `jdg_${randomUUID()}`,
+      name: invitation.name,
+      email: invitation.email,
+      tracks: invitation.tracks,
+      joined_at: new Date().toISOString(),
+    });
+    this.judgeInvites.add({ ...invitation, accepted_at: new Date().toISOString(), judge: judge.id });
+    this.#recordAudit("judge.joined", { judge: judge.id, tracks: judge.tracks });
+    return judge;
+  }
+
+  assignJudgeProjects(judgeId, projectIds) {
+    const judge = this.judges.get(judgeId);
+    if (!judge) throw new DomainError("no such judge", 404);
+    if (!Array.isArray(projectIds) || !projectIds.length) throw new DomainError("project ids are required", 400);
+    const created = [];
+    for (const projectId of [...new Set(projectIds)]) {
+      const project = this.projects.get(projectId);
+      if (!project) throw new DomainError(`unknown project: ${projectId}`, 404);
+      if (!(judge.tracks || []).includes(project.track)) throw new DomainError("judge cannot be assigned outside their tracks", 403);
+      const id = `${judgeId}:${projectId}`;
+      if (!this.assignments.has(id)) created.push(this.assignments.add({ id, judge: judgeId, project: projectId, track: project.track }));
+    }
+    this.#recordAudit("judging.assignments.created", { judge: judgeId, count: created.length });
+    return created;
+  }
+
   assignmentsFor(judgeId) {
     return this.assignments.list().filter((assignment) => assignment.judge === judgeId);
   }
@@ -123,14 +193,15 @@ class JudgingService {
     return this.projects.list().map((project) => {
       const assigned = assignments.filter((item) => item.project === project.id);
       const submitted = this.scores.byProject(project.id);
+      const assignedScores = submitted.filter((score) => assigned.some((item) => item.judge === score.judge));
       return {
         project: project.id,
         title: project.title,
         track: project.track,
         assigned: assigned.length,
-        scored: submitted.length,
-        remaining: Math.max(0, assigned.length - submitted.length),
-        status: assigned.length > 0 && submitted.length >= assigned.length ? "complete" : submitted.length ? "in progress" : "not started",
+        scored: assignedScores.length,
+        remaining: Math.max(0, assigned.length - assignedScores.length),
+        status: assigned.length > 0 && assignedScores.length >= assigned.length ? "complete" : assignedScores.length ? "in progress" : "not started",
       };
     });
   }
@@ -138,6 +209,25 @@ class JudgingService {
   rubricWeights() {
     const event = this.event.get() || {};
     return event.rubric_weights || { functionality: 0.4, quality: 0.35, innovation: 0.25 };
+  }
+
+  configureRubric(weights) {
+    if (!weights || typeof weights !== "object" || Array.isArray(weights)) {
+      throw new DomainError("rubric weights must be an object", 400);
+    }
+    const entries = Object.entries(weights);
+    const rubricCriteria = new Set(["functionality", "quality", "innovation"]);
+    if (entries.length !== rubricCriteria.size || entries.some(([key, value]) =>
+      !rubricCriteria.has(key) || !Number.isFinite(Number(value)) || Number(value) <= 0
+    )) {
+      throw new DomainError("provide positive weights for functionality, quality, and innovation", 400);
+    }
+    const total = entries.reduce((sum, [, value]) => sum + Number(value), 0);
+    const normalized = Object.fromEntries(entries.map(([key, value]) => [key, Number(value) / total]));
+    const current = this.event.get() || {};
+    this.event.set({ ...current, rubric_weights: normalized });
+    this.#recordAudit("judging.rubric.updated", { weights: normalized });
+    return normalized;
   }
 
   weightedScore(criteria) {

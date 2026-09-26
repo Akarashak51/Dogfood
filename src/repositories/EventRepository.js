@@ -30,6 +30,13 @@ class EventRepository {
     const releaseAt = this.#event.results_publish_at || this.#event.voting_close;
     return Boolean(releaseAt && new Date(releaseAt).getTime() <= now.getTime());
   }
+
+  votingIsOpen(now = new Date()) {
+    if (!this.#event) return true;
+    if (this.#event.voting_open && new Date(this.#event.voting_open).getTime() > now.getTime()) return false;
+    if (this.#event.voting_close && new Date(this.#event.voting_close).getTime() < now.getTime()) return false;
+    return true;
+  }
 }
 
 module.exports = { EventRepository };

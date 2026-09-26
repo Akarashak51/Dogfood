@@ -28,6 +28,10 @@ class SubmissionService {
     return !this.event.isClosed();
   }
 
+  availableTracks() {
+    return this.tracks.list();
+  }
+
   /**
   * @param {{title?: string, team?: string, track?: string, repo_url?: string, summary?: string}} input
   * @param {string} ownerTeam the authenticated participant's team id

@@ -1,9 +1,13 @@
 const assert = require("node:assert/strict");
+const express = require("express");
+const http = require("node:http");
 const test = require("node:test");
 
 const fixtures = require("../fixtures.json");
 const { createContainer } = require("../src/container");
 const { EventRepository } = require("../src/repositories/EventRepository");
+const { buildGalleryController } = require("../src/controllers/galleryController");
+const { buildSubmissionController } = require("../src/controllers/submissionController");
 
 function seededContainer() {
   const container = createContainer();
@@ -84,4 +88,125 @@ test("participants can create and edit only their own project before the deadlin
   assert.equal(services.submission.update(project.id, { title: "Updated" }, ownerTeam).title, "Updated");
   repositories.event.set({ ...fixtures.event, submissions_close: "2000-01-01T00:00:00Z" });
   assert.throws(() => services.submission.update(project.id, { title: "Late edit" }, ownerTeam), (error) => error.status === 403);
+});
+
+test("bulk import validates references and signed judge records detect tampering", () => {
+  const { repositories, services } = seededContainer();
+  const imported = services.stretch.bulkImport([{
+    title: "Imported project",
+    team: fixtures.teams[0].id,
+    track: fixtures.tracks[0].id,
+  }]);
+  assert.equal(imported.length, 1);
+  assert.throws(() => services.stretch.bulkImport([{ title: "Orphan", team: "missing-team" }]), (error) => error.status === 400);
+
+  const record = services.stretch.signedJudgeRecord(fixtures.judges[0].id);
+  assert.equal(services.stretch.verifyJudgeRecord(record).valid, true);
+  record.payload.judge_name = "Modified identity";
+  assert.equal(services.stretch.verifyJudgeRecord(record).valid, false);
+  assert.ok(repositories.audit.list().some((entry) => entry.action === "projects.imported"));
+});
+
+test("organizers can configure weights and judges can score eligible open assignments", () => {
+  const { repositories, services } = seededContainer();
+  const weights = services.judging.configureRubric({ functionality: 2, quality: 1, innovation: 1 });
+  assert.deepEqual(weights, { functionality: 0.5, quality: 0.25, innovation: 0.25 });
+  const assignment = repositories.assignment.list().find((item) =>
+    !repositories.score.byJudge(item.judge).some((score) => score.project === item.project)
+  );
+  const score = services.judging.recordScore({
+    judgeId: assignment.judge,
+    project: assignment.project,
+    criteria: { functionality: 5, quality: 3, innovation: 1 },
+  });
+  assert.equal(score.judge, assignment.judge);
+  assert.equal(services.judging.weightedScore(score.criteria), 3.5);
+});
+
+test("judge invitations are one-time and assignments enforce track eligibility", () => {
+  const { repositories, services } = seededContainer();
+  const track = fixtures.tracks[0].id;
+  const invite = services.judging.createJudgeInvitation({ name: "New Judge", email: "new@example.org", tracks: [track] });
+  const judge = services.judging.acceptJudgeInvitation(invite.token);
+  assert.deepEqual(judge.tracks, [track]);
+  assert.equal(services.judging.judgeInvitation(invite.token), null);
+  const project = fixtures.projects.find((item) => item.track === track);
+  assert.equal(services.judging.assignJudgeProjects(judge.id, [project.id]).length, 1);
+  const otherProject = fixtures.projects.find((item) => item.track !== track);
+  assert.throws(() => services.judging.assignJudgeProjects(judge.id, [otherProject.id]), (error) => error.status === 403);
+  assert.ok(repositories.audit.list().some((entry) => entry.action === "judge.joined"));
+});
+
+test("team invitations are email-bound and single-use", () => {
+  const { repositories, services } = seededContainer();
+  repositories.event.set({ ...fixtures.event, submissions_close: "2999-01-01T00:00:00Z" });
+  const team = services.teamManagement.createTeam("Fresh Team", "owner@example.org");
+  const invitation = services.teamManagement.createInvite(team.id, "member@example.org");
+  assert.throws(() => services.teamManagement.acceptInvite(invitation.token, "other@example.org"), (error) => error.status === 403);
+  assert.equal(services.teamManagement.acceptInvite(invitation.token, "member@example.org").team.id, team.id);
+  assert.equal(repositories.team.get(team.id).members.length, 2);
+  assert.throws(() => services.teamManagement.acceptInvite(invitation.token, "member@example.org"), (error) => error.status === 404);
+});
+
+test("organizer event configuration validates tracks, windows, access, and prizes", () => {
+  const { repositories, services } = seededContainer();
+  const result = services.eventManagement.configure({
+    name: "Configured event",
+    submissions_close: "2999-08-01T00:00:00Z",
+    voting_open: "2999-08-02T00:00:00Z",
+    voting_close: "2999-08-05T00:00:00Z",
+    results_publish_at: "2999-08-05T00:00:00Z",
+    voting_access: "email",
+    tracks: fixtures.tracks,
+    prizes: ["Best project"],
+  });
+  assert.equal(result.event.name, "Configured event");
+  assert.equal(repositories.event.votingIsOpen(new Date("2999-08-03T00:00:00Z")), true);
+  assert.equal(repositories.event.resultsAreVisible(new Date("2999-08-03T00:00:00Z")), false);
+  assert.equal(repositories.event.resultsAreVisible(new Date("2999-08-06T00:00:00Z")), true);
+  assert.throws(() => services.eventManagement.configure({ name: "Bad", voting_access: "unlocked" }), (error) => error.status === 400);
+});
+
+test("webhook delivery is signed, tracked, and blocks private targets", async () => {
+  const { repositories, services } = seededContainer();
+  assert.throws(() => services.stretch.registerWebhook("http://127.0.0.1/hook", "*"), (error) => error.status === 400);
+  const hook = services.stretch.registerWebhook("https://hooks.example.org/dogfood", "score.recorded");
+  const previousFetch = global.fetch;
+  let requestOptions;
+  services.stretch.resolveWebhookHost = async () => [{ address: "93.184.216.34", family: 4 }];
+  global.fetch = async (_url, options) => {
+    requestOptions = options;
+    return { ok: true, status: 204, body: { cancel: async () => {} } };
+  };
+  try {
+    await services.stretch.dispatchWebhooks("score.recorded", { project: "prj_01" });
+  } finally {
+    global.fetch = previousFetch;
+  }
+  assert.equal(requestOptions.method, "POST");
+  assert.match(requestOptions.headers["X-Dogfood-Signature"], /^sha256=[a-f0-9]{64}$/);
+  assert.equal(repositories.webhookDelivery.list()[0].status, "delivered");
+  assert.equal(hook.event, "score.recorded");
+});
+
+test("the specific submission page is routed before project detail", async () => {
+  const { services } = seededContainer();
+  const app = express();
+  app.use(buildSubmissionController(services));
+  app.use(buildGalleryController(services));
+  const server = app.listen(0);
+  try {
+    const response = await new Promise((resolve, reject) => {
+      http.get({ hostname: "127.0.0.1", port: server.address().port, path: "/projects/new" }, (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => body += chunk);
+        res.on("end", () => resolve({ status: res.statusCode, body }));
+      }).on("error", reject);
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.body, /Submissions are closed/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });

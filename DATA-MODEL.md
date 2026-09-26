@@ -28,7 +28,7 @@ together once in `src/container.js`:
 | Repository | Backing structure | Extra indices |
 |-------------|--------------------|----------------|
 | `EventRepository` | single object (not a collection) | — |
-| `track` (`InMemoryRepository`) | `Map<id, track>` | none needed — no route filters by track today |
+| `track` (`InMemoryRepository`) | `Map<id, track>` | membership checked during assignments and submissions |
 | `JudgeRepository` | `Map<id, judge>` | cached sorted id list (`orderedIds()`) |
 | `team` (`InMemoryRepository`) | `Map<id, team>` | none |
 | `project` (`InMemoryRepository`) | `Map<id, project>` | none — see below |
@@ -36,6 +36,7 @@ together once in `src/container.js`:
 | `CommentRepository` | `Map<id, comment>` | `Map<projectId, Set<commentId>>` |
 | `VoteRepository` | `Map<id, vote>` | `Map<projectId, Set<voteId>>` |
 | `webhook` (`InMemoryRepository`) | `Map<id, webhook>` | none |
+| `assignment`, `invite`, `judgeInvite`, `audit` | `Map<id, record>` | runtime assignment, invitation, and audit state |
 
 We only index what's actually queried by a foreign key more than
 once — see `COMPLEXITY.md` for the full reasoning. `project` has no
@@ -55,16 +56,20 @@ data, we just index it.
 ## Data added by this portal (not in fixtures.json)
 
 - **Comments** — public, one per submission, tied to a project id.
-- **Votes** — public, one row per vote, tied to a project id and the
-  voter's IP (best-effort deduplication only — see README's honest
-  limitations).
-- **Webhooks** — organizer-registered `{ url, event }` pairs, recorded
-  but not delivered (see `ARCHITECTURE.md`).
-- New projects submitted via `POST /projects/new` or
-  `POST /api/import` get a generated id (`prj_<timestamp>` or
-  `prj_import_<timestamp>_<index>`) and are added directly into the
-  same `project` repository as fixture projects — there is no second,
-  separate store for "submitted at runtime" vs. "seeded" projects.
+- **Votes** — one vote per project and requester fingerprint. The stored
+  voter value is a process-keyed HMAC-SHA-256 digest, not the raw IP/email. Open-link mode
+  still permits Sybil identities and is only a best-effort control.
+- **Assignments** — `{ judge, project, track }` records keyed by
+  `judgeId:projectId`; writes re-check declared judge tracks.
+- **Invitations** — expiring, single-use participant and judge tokens;
+  participant invites may be bound to an email address.
+- **Audit** — action, timestamp, and privacy-limited details for judging,
+  imports, comments, votes, and rate-limit events.
+- **Webhooks** — validated organizer registrations with an HMAC secret,
+  plus asynchronous delivery records. Attempts are single-shot and
+  process-local; no durable retry worker is included.
+- New projects submitted through browser or REST routes use generated
+  UUID-backed ids and join the same repository as fixture projects.
 
 ## Persistence
 

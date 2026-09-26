@@ -13,6 +13,10 @@ function buildExportController(services) {
     res.status(200).set("Content-Type", "text/csv").send(exportService.toCsv());
   });
 
+  router.get("/api/export/projects.csv", requireRole("organizer"), (_req, res) => {
+    res.status(200).set("Content-Type", "text/csv").send(exportService.projectsToCsv());
+  });
+
   return router;
 }
 

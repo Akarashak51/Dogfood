@@ -1,5 +1,6 @@
 const express = require("express");
 const { layout, escapeHtml } = require("../views/html");
+const { requireRole } = require("../auth/requireRole");
 const { handleControllerError } = require("./handleControllerError");
 
 /**
@@ -14,23 +15,30 @@ const { handleControllerError } = require("./handleControllerError");
  */
 function buildGalleryController(services) {
   const router = express.Router();
-  const { gallery, community } = services;
+  const { gallery, community, submission } = services;
 
   // T1 (FR-1.1, FR-1.2): a stranger can browse the gallery — no auth required.
-  router.get("/projects", (_req, res) => {
-    const projects = gallery.listProjects();
+  router.get("/projects", (req, res) => {
+    const query = String(req.query.q || "").trim().toLowerCase();
+    const selectedTrack = String(req.query.track || "");
+    const tracks = gallery.listTracks();
+    const projects = gallery.listProjects().filter((project) =>
+      (!selectedTrack || project.track === selectedTrack) &&
+      (!query || `${project.title} ${project.summary || ""} ${gallery.teamName(project.team)}`.toLowerCase().includes(query))
+    );
     const projectsHtml = projects
-      .map(
-        (p) => `<div class="card">
-          <h3><a href="/projects/${escapeHtml(p.id)}">${escapeHtml(p.title)}</a></h3>
-          <p>${escapeHtml(p.summary || "")}</p>
-          <p class="muted">Team: ${escapeHtml(gallery.teamName(p.team))}</p>
-        </div>`
+      .map((project, index) => `<article class="project-card" style="animation-delay:${Math.min(index, 12) * 35}ms">
+          <div class="card-top"><span class="track-tag">${escapeHtml(gallery.trackName(project.track))}</span><span class="meta">${gallery.voteCount(project.id)} votes</span></div>
+          <h2><a href="/projects/${escapeHtml(project.id)}">${escapeHtml(project.title)}</a></h2>
+          <p>${escapeHtml(project.summary || "No summary provided.")}</p>
+          <p class="meta">${escapeHtml(gallery.teamName(project.team))}</p>
+        </article>`
       )
       .join("\n");
-
+    const options = tracks.map((track) => `<option value="${escapeHtml(track.id)}"${track.id === selectedTrack ? " selected" : ""}>${escapeHtml(track.name)}</option>`).join("");
+    const filter = `<form class="toolbar" method="get" action="/projects"><label>Search projects<input name="q" value="${escapeHtml(req.query.q || "")}" placeholder="Name, team or description"></label><label>Track<select name="track"><option value="">All tracks</option>${options}</select></label><button type="submit">Filter gallery</button></form>`;
     res.status(200).send(
-      layout("Gallery", `<h1>Gallery</h1>${projectsHtml || "<p>No projects yet.</p>"}`)
+      layout("Project gallery", `<p class="eyebrow">${projects.length} projects · ${tracks.length} tracks</p><div class="row-between"><h1>Project gallery</h1><a class="button secondary" href="/api/v1/projects">API</a></div>${filter}<div class="project-grid">${projectsHtml || '<div class="empty">No projects match these filters.</div>'}</div>`)
     );
   });
 
@@ -48,26 +56,22 @@ function buildGalleryController(services) {
       : `<p class="muted">Results are hidden until the event closes.</p>`;
 
     const commentsHtml = comments
-      .map((c) => `<li><strong>${escapeHtml(c.author)}:</strong> ${escapeHtml(c.text)}</li>`)
+      .map((comment) => `<div class="comment"><strong>${escapeHtml(comment.author)}</strong><p>${escapeHtml(comment.text)}</p><time class="meta">${escapeHtml(comment.created_at)}</time></div>`)
       .join("");
+    const repoLink = project.repo_url ? `<a class="button secondary" href="${escapeHtml(project.repo_url)}" target="_blank" rel="noreferrer">Repository</a>` : "";
+    const emailField = community.votingAccess() === "email" ? '<label>Email for voting<input type="email" name="email" required autocomplete="email"></label>' : "";
+    const editForm = req.user && req.user.role === "participant" && req.user.teamId === project.team && submission.isOpen()
+      ? `<section class="panel"><p class="eyebrow">Team workspace</p><h2>Edit submission</h2><form method="post" action="/projects/${escapeHtml(project.id)}/edit"><label>Title<input name="title" value="${escapeHtml(project.title)}" required maxlength="120"></label><label>Summary<textarea name="summary" maxlength="2000">${escapeHtml(project.summary || "")}</textarea></label><label>Repository URL<input name="repo_url" type="url" value="${escapeHtml(project.repo_url || "")}"></label><label>Track<input name="track" value="${escapeHtml(project.track || "")}"></label><button type="submit">Save changes</button></form></section>`
+      : "";
 
     res.status(200).send(
       layout(
         project.title,
-        `<h1>${escapeHtml(project.title)}</h1>
+        `<p class="eyebrow">${escapeHtml(gallery.trackName(project.track))} · ${escapeHtml(gallery.teamName(project.team))}</p><div class="row-between"><h1>${escapeHtml(project.title)}</h1>${repoLink}</div>
          <p>${escapeHtml(project.summary || "")}</p>
-         <h3>Results</h3>${resultsHtml}
-         <h3>Public votes: ${voteCount}</h3>
-         <form method="post" action="/projects/${escapeHtml(project.id)}/vote">
-           <button type="submit">Vote for this project</button>
-         </form>
-         <h3>Comments</h3>
-         <ul>${commentsHtml || '<li class="muted">No comments yet.</li>'}</ul>
-         <form method="post" action="/projects/${escapeHtml(project.id)}/comments">
-           <input name="author" placeholder="Your name" required>
-           <textarea name="text" placeholder="Comment" required></textarea>
-           <button type="submit">Post comment</button>
-         </form>`
+         <div class="split"><section class="panel"><div class="section-head"><h2>Results</h2><span class="status">${resultsVisible ? "Published" : "Sealed"}</span></div>${resultsHtml}</section><section class="panel"><p class="eyebrow">Community signal</p><h2>${voteCount} votes</h2><form method="post" action="/projects/${escapeHtml(project.id)}/vote">${emailField}<button type="submit">Cast vote</button></form></section></div>
+         <div class="section-head"><h2>Community notes</h2><span class="meta">${comments.length} comments</span></div><section>${commentsHtml || '<p class="muted">No comments yet.</p>'}</section>
+         <section class="panel"><form method="post" action="/projects/${escapeHtml(project.id)}/comments"><label>Your name<input name="author" placeholder="Name" maxlength="80" required></label><label>Comment<textarea name="text" placeholder="Leave useful feedback" maxlength="2000" required></textarea></label><button type="submit">Post comment</button></form></section>${editForm}`
       )
     );
   });
@@ -77,6 +81,7 @@ function buildGalleryController(services) {
       const access = community.votingAccess();
       const voter = access === "email" ? String(req.body.email || "").trim().toLowerCase() : req.ip;
       community.castVote(req.params.id, voter, Boolean(req.user));
+      services.stretch.dispatchWebhooks("vote.cast", { project: req.params.id });
       res.redirect(`/projects/${req.params.id}`);
     } catch (err) {
       handleControllerError(err, res);
@@ -88,13 +93,23 @@ function buildGalleryController(services) {
     express.urlencoded({ extended: true }),
     (req, res) => {
       try {
-        community.addComment(req.params.id, req.body.author, req.body.text, req.ip);
+        const comment = community.addComment(req.params.id, req.body.author, req.body.text, req.ip);
+        services.stretch.dispatchWebhooks("comment.created", { project: req.params.id, comment: comment.id });
         res.redirect(`/projects/${req.params.id}`);
       } catch (err) {
         handleControllerError(err, res);
       }
     }
   );
+
+  router.post("/projects/:id/edit", express.urlencoded({ extended: true }), requireRole("participant"), (req, res) => {
+    try {
+      submission.update(req.params.id, req.body, req.user.teamId);
+      res.redirect(`/projects/${req.params.id}`);
+    } catch (err) {
+      handleControllerError(err, res);
+    }
+  });
 
   return router;
 }

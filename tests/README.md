@@ -1,11 +1,21 @@
 # Tests
 
-There is no automated test suite beyond the DOGFOOD checker itself
-(`run.py`, run against `.dogfood.toml`) — that already exercises every
-behaviour that's actually scored (T1 gallery/submission/deadline, T2
-judging/isolation/export).
+Run the local behavior suite with:
 
-## Manual smoke test for the T3/T4 extras (not covered by run.py)
+```bash
+npm test
+```
+
+The built-in Node test runner covers deadline/result-window separation,
+participant ownership, duplicate voting, track-safe assignments and
+scoring, weighted normalization, event configuration, team/judge
+invitations, bulk import validation, and signed-record tamper detection.
+It has no third-party test dependency.
+
+The official `run.py` remains the submission acceptance checker. It
+verifies T1 and T2 only; it does not certify T3 or T4.
+
+## Manual route smoke test
 
 ```bash
 # Public voting + comments
@@ -16,10 +26,13 @@ curl -i -X POST http://localhost:8080/projects/<a-real-project-id>/comments \
 # Randomized judge queue
 curl -i http://localhost:8080/api/judge/queue -H 'Cookie: session=jdg_a_91bc'
 
-# REST API
+# REST API, search, widget, and OpenAPI document
 curl -i http://localhost:8080/api/v1/projects
+curl -i "http://localhost:8080/api/v1/projects?track=trk_01"
+curl -i http://localhost:8080/embed.js
+curl -i http://localhost:8080/api/openapi.yaml
 
-# Webhook registration (organizer only)
+# Webhook registration (organizer only; delivery status is recorded)
 curl -i -X POST http://localhost:8080/api/webhooks \
   -H 'Cookie: session=org_7f2a' -H 'Content-Type: application/json' \
   -d '{"url":"https://example.org/hook","event":"project.submitted"}'
@@ -29,8 +42,9 @@ curl -i -X POST http://localhost:8080/api/import \
   -H 'Cookie: session=org_7f2a' -H 'Content-Type: application/json' \
   -d '{"projects":[{"team":"tm_01","title":"Imported project"}]}'
 
-# Certificate
+# Certificate and signed judge record
 curl -i http://localhost:8080/api/certificates/<a-real-team-id>
+curl -i http://localhost:8080/api/v1/judges/jdg_01/record
 ```
 
 Expect 200/201 for the happy paths above, and 403 if you drop the

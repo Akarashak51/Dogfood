@@ -1,0 +1,322 @@
+openapi: 3.1.0
+info:
+  title: DOGFOOD Portal API
+  version: 1.0.0
+  description: >-
+    Local-first hackathon submission, judging, community, and organizer API.
+    Session identity is carried in an HttpOnly session cookie. Runtime data is in memory.
+servers:
+  - url: http://localhost:8080
+security: []
+paths:
+  /api/event:
+    get:
+      summary: Read public event configuration
+      responses:
+        "200":
+          description: Event and track data
+  /api/organizer/event:
+    put:
+      summary: Configure event dates, tracks, prizes, and voting access
+      security: [{ SessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventConfiguration" }
+      responses:
+        "200": { description: Updated event configuration }
+        "403": { description: Organizer role required }
+  /api/v1/teams:
+    post:
+      summary: Register a team and issue a participant session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email]
+              properties:
+                name: { type: string, maxLength: 80 }
+                email: { type: string, format: email }
+      responses:
+        "201": { description: Team created; session cookie issued }
+        "403": { description: Registration closed }
+  /api/v1/team:
+    get:
+      summary: Read the signed-in participant's team
+      security: [{ SessionCookie: [] }]
+      responses:
+        "200": { description: Team and members }
+        "403": { description: Participant role required }
+  /api/v1/judge-invitations/{token}/accept:
+    post:
+      summary: Accept an invited judge seat and issue a judge session
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Judge identity and session cookie issued }
+        "404": { description: Invalid, expired, or used invitation }
+  /api/v1/teams/{id}/invitations:
+    post:
+      summary: Create an email-bound, expiring team invite
+      security: [{ SessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "201": { description: One-time invite token }
+        "403": { description: Team ownership required }
+  /api/v1/invitations/{token}/accept:
+    post:
+      summary: Accept a team invite and issue a participant session
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200": { description: Membership accepted; session cookie issued }
+        "404": { description: Invalid, expired, or used invite }
+  /api/v1/projects:
+    get:
+      summary: Search public projects
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: track, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Filtered project list }
+    post:
+      summary: Submit a project for the participant's team
+      security: [{ SessionCookie: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectInput" }
+      responses:
+        "201": { description: Project created }
+        "403": { description: Participant role or open deadline required }
+  /api/v1/projects/{id}:
+    get:
+      summary: Read a public project and community data
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      responses:
+        "200": { description: Project detail; judge results remain private before publication }
+        "404": { description: Project not found }
+    put:
+      summary: Edit the participant's project before the deadline
+      security: [{ SessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectInput" }
+      responses:
+        "200": { description: Project updated }
+        "403": { description: Team ownership or deadline check failed }
+  /api/v1/projects/{id}/votes:
+    post:
+      summary: Cast one rate-limited community vote
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email, description: Required when event voting access is email-gated }
+      responses:
+        "201": { description: Vote recorded }
+        "409": { description: Duplicate vote }
+        "429": { description: Rate limit exceeded }
+  /api/v1/projects/{id}/comments:
+    post:
+      summary: Add a rate-limited public comment
+      parameters:
+        - { $ref: "#/components/parameters/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                author: { type: string, maxLength: 80 }
+                text: { type: string, maxLength: 2000 }
+      responses:
+        "201": { description: Comment recorded }
+        "429": { description: Rate limit exceeded }
+  /api/v1/judge/scores:
+    post:
+      summary: Submit a private ballot for an assigned project
+      security: [{ SessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project, criteria]
+              properties:
+                project: { type: string }
+                criteria: { type: object, additionalProperties: { type: integer, minimum: 1, maximum: 5 } }
+                comment: { type: string, maxLength: 4000 }
+      responses:
+        "201": { description: Ballot recorded }
+        "403": { description: Judge role or assignment required }
+  /api/organizer/judging/progress:
+    get:
+      summary: Read assigned scoring progress by project
+      security: [{ SessionCookie: [] }]
+      responses:
+        "200": { description: Assignment progress }
+        "403": { description: Organizer role required }
+  /api/organizer/judging/normalization:
+    get:
+      summary: Read raw and normalized ranking
+      security: [{ SessionCookie: [] }]
+      responses:
+        "200": { description: Raw scores, normalized scores, and method }
+  /api/organizer/judging/rubric:
+    put:
+      summary: Configure criterion weights
+      security: [{ SessionCookie: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [weights]
+              properties:
+                weights:
+                  type: object
+                  properties:
+                    functionality: { type: number, exclusiveMinimum: 0 }
+                    quality: { type: number, exclusiveMinimum: 0 }
+                    innovation: { type: number, exclusiveMinimum: 0 }
+      responses:
+        "200": { description: Weights normalized to sum to one }
+  /api/export.csv:
+    get:
+      summary: Export ballots as CSV
+      security: [{ SessionCookie: [] }]
+      responses:
+        "200": { description: CSV ballot export, content: { text/csv: {} } }
+  /api/v1/export/projects.csv:
+    get:
+      summary: Export project submissions as CSV
+      security: [{ SessionCookie: [] }]
+      responses:
+        "200": { description: CSV project export, content: { text/csv: {} } }
+  /api/v1/import:
+    post:
+      summary: Bulk import up to 500 projects
+      security: [{ SessionCookie: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projects]
+              properties:
+                projects: { type: array, maxItems: 500, items: { $ref: "#/components/schemas/ProjectInput" } }
+      responses:
+        "201": { description: Imported projects }
+        "400": { description: Invalid team, track, or project data }
+  /api/v1/webhooks:
+    post:
+      summary: Register an event webhook endpoint
+      security: [{ SessionCookie: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, event]
+              properties:
+                url: { type: string, format: uri }
+                event: { type: string, enum: ["*", project.submitted, project.updated, project.imported, score.recorded, vote.cast, comment.created, team.created, team.invited, team.joined, event.updated, judge.invited, judge.joined, judging.assignments.created, judging.rubric.updated, certificate.generated] }
+      responses:
+        "201": { description: Webhook registration created; response includes the HMAC secret }
+  /api/organizer/webhooks/deliveries:
+    get:
+      summary: Read webhook delivery attempts
+      security: [{ SessionCookie: [] }]
+      responses:
+        "200": { description: Pending, delivered, and failed attempts }
+  /api/v1/judges/{judgeId}/record:
+    get:
+      summary: Generate a signed judge participation record
+      parameters:
+        - { name: judgeId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Ed25519-signed record and public key }
+  /api/v1/judges/records/verify:
+    post:
+      summary: Verify a signed participation record's integrity
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Signature integrity result }
+  /api/certificates/{teamId}:
+    get:
+      summary: Generate a plain-text team certificate
+      parameters:
+        - { name: teamId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Certificate text, content: { text/plain: {} } }
+  /embed.js:
+    get:
+      summary: Embed the public project gallery
+      responses:
+        "200": { description: JavaScript widget loader, content: { application/javascript: {} } }
+components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    EventConfiguration:
+      type: object
+      properties:
+        name: { type: string, maxLength: 120 }
+        submissions_close: { type: [string, "null"], format: date-time }
+        voting_open: { type: [string, "null"], format: date-time }
+        voting_close: { type: [string, "null"], format: date-time }
+        results_publish_at: { type: [string, "null"], format: date-time }
+        voting_access: { type: string, enum: [open, email, authenticated] }
+        tracks: { type: array, items: { type: object, required: [name], properties: { id: { type: string }, name: { type: string } } } }
+        prizes: { type: array, items: { type: [string, object] } }
+    ProjectInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, maxLength: 120 }
+        track: { type: string }
+        summary: { type: string, maxLength: 2000 }
+        repo_url: { type: string, format: uri }

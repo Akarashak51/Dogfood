@@ -13,15 +13,17 @@ class GalleryService {
    *           score: import('../repositories/ScoreRepository').ScoreRepository,
    *           comment: import('../repositories/CommentRepository').CommentRepository,
    *           vote: import('../repositories/VoteRepository').VoteRepository,
-   *           event: import('../repositories/EventRepository').EventRepository}} repositories
+  *           event: import('../repositories/EventRepository').EventRepository,
+  *           track: import('../repositories/InMemoryRepository').InMemoryRepository}} repositories
    */
-  constructor({ project, team, score, comment, vote, event }) {
+  constructor({ project, team, score, comment, vote, event, track }) {
     this.projects = project;
     this.teams = team;
     this.scores = score;
     this.comments = comment;
     this.votes = vote;
     this.event = event;
+    this.tracks = track;
   }
 
   /** @complexity O(n) time / O(n) space, n = project count. */
@@ -29,10 +31,23 @@ class GalleryService {
     return this.projects.list();
   }
 
+  listTracks() {
+    return this.tracks.list();
+  }
+
+  voteCount(projectId) {
+    return this.votes.byProject(projectId).length;
+  }
+
   /** @param {string} teamId @complexity O(1). */
   teamName(teamId) {
     const team = this.teams.get(teamId);
     return team ? team.name : teamId;
+  }
+
+  trackName(trackId) {
+    const track = trackId && this.tracks.get(trackId);
+    return track ? track.name : "Open track";
   }
 
   /**

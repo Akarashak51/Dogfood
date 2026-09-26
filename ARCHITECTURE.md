@@ -94,10 +94,10 @@ bug, not a 400.
 
 Voting, comments, and the randomized judge queue reuse the same
 repositories and the same `identify`/`requireRole` machinery — public
-routes simply skip `requireRole`. Webhooks are recorded
-(`WebhookRepository`, via `InMemoryRepository`) rather than delivered,
-since delivering them would require outbound network access, which
-conflicts with the "network off" requirement for `docker compose up`.
+routes skip `requireRole` except where the event requires authenticated voting. Votes are deduplicated by a hashed requester identity, rate-limited in memory, and audited. Results use an explicit publication timestamp rather than the submission deadline. Webhooks are recorded
+(`WebhookRepository`, via `InMemoryRepository`). Requests are HMAC-signed,
+asynchronous, bounded by a short timeout, and reject direct private targets
+and redirects. Delivery is best-effort, single-shot, and process-local.
 `StretchService.certificateFor()` deliberately does a linear O(n) scan
 over all projects rather than maintaining a permanent by-team index —
 it's an infrequent, uncontested T4 route, and adding a second index

@@ -1,5 +1,7 @@
 const { DomainError } = require("../errors/DomainError");
-const { createHash } = require("node:crypto");
+const { createHmac, randomBytes } = require("node:crypto");
+
+const FINGERPRINT_KEY = randomBytes(32);
 
 /**
  * The public, unauthenticated actions (T3): voting and commenting.
@@ -33,13 +35,15 @@ class CommunityService {
     if (!this.projects.has(projectId)) throw new DomainError("no such project", 404);
     if (!voterIdentifier) throw new DomainError("voter identity is required", 400);
     const access = this.votingAccess();
+    if (this.event && !this.event.votingIsOpen()) throw new DomainError("community voting is closed", 403);
     if (access === "authenticated" && !authenticated) throw new DomainError("sign in to vote", 401);
     if (access === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(voterIdentifier)) {
       throw new DomainError("a valid email address is required to vote", 400);
     }
     this.#consumeRateLimit(`vote:${voterIdentifier}`, 12);
-    const voterHash = createHash("sha256").update(voterIdentifier).digest("hex");
+    const voterHash = this.#fingerprint(voterIdentifier);
     if (this.votes.byProject(projectId).some((vote) => vote.voter === voterHash)) {
+      this.#recordAudit("vote.rejected.duplicate", { project: projectId, voter: this.#fingerprint(voterIdentifier) });
       throw new DomainError("you have already voted for this project", 409);
     }
     const vote = this.votes.add({
@@ -81,13 +85,16 @@ class CommunityService {
   #consumeRateLimit(key, limit) {
     const now = Date.now();
     const recent = (this.rateWindows.get(key) || []).filter((timestamp) => now - timestamp < 60_000);
-    if (recent.length >= limit) throw new DomainError("too many requests; try again in a minute", 429);
+    if (recent.length >= limit) {
+      this.#recordAudit("request.rate_limited", { action: key.split(":", 1)[0], requester: this.#fingerprint(key.slice(key.indexOf(":") + 1)) });
+      throw new DomainError("too many requests; try again in a minute", 429);
+    }
     recent.push(now);
     this.rateWindows.set(key, recent);
   }
 
   #fingerprint(value) {
-    return createHash("sha256").update(String(value)).digest("hex").slice(0, 16);
+    return createHmac("sha256", FINGERPRINT_KEY).update(String(value)).digest("hex").slice(0, 16);
   }
 
   #recordAudit(action, details) {

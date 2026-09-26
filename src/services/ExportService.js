@@ -36,6 +36,20 @@ class ExportService {
 
     return [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n") + "\n";
   }
+
+  projectsToCsv() {
+    const header = ["project_id", "title", "team_id", "track_id", "summary", "repository_url", "submitted_at"];
+    const rows = this.projects.list().map((project) => [
+      project.id,
+      project.title,
+      project.team,
+      project.track || "",
+      project.summary || "",
+      project.repo_url || "",
+      project.submitted_at || "",
+    ]);
+    return [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n") + "\n";
+  }
 }
 
 /** @param {unknown} value @complexity O(m), m = value's string length. */
